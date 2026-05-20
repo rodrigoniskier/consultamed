@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+import { supabase, supabaseAuthHelper } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { AppointmentWithDetails, Patient, Profile, Specialty } from '../types';
 import { LogOut, Plus, Users, Stethoscope, Search, Edit } from 'lucide-react';
@@ -16,11 +16,20 @@ export function SecretaryDashboard() {
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'agendamentos' | 'pacientes'>('agendamentos');
+  const [view, setView] = useState<'agendamentos' | 'pacientes' | 'medicos' | 'especialidades'>('agendamentos');
   
   // Forms States
   const [showApptModal, setShowApptModal] = useState(false);
   const [newAppt, setNewAppt] = useState({ patient_id: '', specialty_id: '', doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado' });
+
+  const [showPatientModal, setShowPatientModal] = useState(false);
+  const [newPatient, setNewPatient] = useState({ full_name: '', rg: '', phone: '', notes: '' });
+
+  const [showDoctorModal, setShowDoctorModal] = useState(false);
+  const [newDoctor, setNewDoctor] = useState({ full_name: '', email: '', password: '' });
+
+  const [showSpecialtyModal, setShowSpecialtyModal] = useState(false);
+  const [newSpecialty, setNewSpecialty] = useState({ name: '' });
 
   useEffect(() => {
     fetchData();
@@ -58,6 +67,73 @@ export function SecretaryDashboard() {
     }
   };
 
+  const handleCreatePatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from('patients').insert([newPatient]);
+    setShowPatientModal(false);
+    setNewPatient({ full_name: '', rg: '', phone: '', notes: '' });
+    fetchData();
+  };
+
+  const handleDeletePatient = async (id: number) => {
+    if (window.confirm("Deseja realmente excluir este paciente?")) {
+      await supabase.from('patients').delete().eq('id', id);
+      fetchData();
+    }
+  };
+
+  const handleCreateDoctor = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      // 1. SignUp to create auth user securely without affecting our session
+      const { data: authData, error: authError } = await supabaseAuthHelper.auth.signUp({
+        email: newDoctor.email,
+        password: newDoctor.password,
+      });
+
+      if (authError) throw authError;
+
+      // 2. Insert into profiles with the new UID
+      if (authData.user) {
+        await supabase.from('profiles').insert([{ 
+          id: authData.user.id, 
+          full_name: newDoctor.full_name, 
+          role: 'medico' 
+        }]);
+      } else {
+        alert("Ocorreu um problema ao criar as credenciais do médico.");
+      }
+    } catch (err: any) {
+      alert("Erro ao cadastrar médico: " + err.message);
+    }
+    
+    setShowDoctorModal(false);
+    setNewDoctor({ full_name: '', email: '', password: '' });
+    fetchData();
+  };
+
+  const handleDeleteDoctor = async (id: string) => {
+    if (window.confirm("Deseja excluir as informações deste médico? IMPORTANTE: Para que ele perca o acesso integralmente, exclua-o também na seção Authentication do Supabase.")) {
+      await supabase.from('profiles').delete().eq('id', id);
+      fetchData();
+    }
+  };
+
+  const handleCreateSpecialty = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from('specialties').insert([newSpecialty]);
+    setShowSpecialtyModal(false);
+    setNewSpecialty({ name: '' });
+    fetchData();
+  };
+
+  const handleDeleteSpecialty = async (id: number) => {
+    if (window.confirm("Deseja realmente excluir esta especialidade?")) {
+      await supabase.from('specialties').delete().eq('id', id);
+      fetchData();
+    }
+  };
+
   return (
     <div className="h-screen bg-slate-50 text-slate-900 flex flex-col font-sans select-none overflow-hidden">
       {/* Top Navigation Bar */}
@@ -70,6 +146,8 @@ export function SecretaryDashboard() {
           <nav className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-500">
             <button onClick={() => setView('agendamentos')} className={view === 'agendamentos' ? "text-blue-600 border-b-2 border-blue-600 py-5" : "hover:text-slate-800 transition-colors py-5"}>Agenda Global</button>
             <button onClick={() => setView('pacientes')} className={view === 'pacientes' ? "text-blue-600 border-b-2 border-blue-600 py-5" : "hover:text-slate-800 transition-colors py-5"}>Pacientes</button>
+            <button onClick={() => setView('medicos')} className={view === 'medicos' ? "text-blue-600 border-b-2 border-blue-600 py-5" : "hover:text-slate-800 transition-colors py-5"}>Médicos</button>
+            <button onClick={() => setView('especialidades')} className={view === 'especialidades' ? "text-blue-600 border-b-2 border-blue-600 py-5" : "hover:text-slate-800 transition-colors py-5"}>Especialidades</button>
           </nav>
         </div>
         <div className="flex items-center gap-4">
@@ -110,6 +188,14 @@ export function SecretaryDashboard() {
                 <Users className="w-4 h-4 text-blue-600" />
                 <span>Pacientes</span>
               </label>
+              <label onClick={() => setView('medicos')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'medicos' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <Plus className="w-4 h-4 text-blue-600" />
+                <span>Médicos</span>
+              </label>
+              <label onClick={() => setView('especialidades')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'especialidades' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <Edit className="w-4 h-4 text-blue-600" />
+                <span>Especialidades</span>
+              </label>
             </div>
           </div>
 
@@ -131,15 +217,39 @@ export function SecretaryDashboard() {
           <div className="flex flex-col md:flex-row md:items-end justify-between shrink-0 gap-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
-                {view === 'agendamentos' ? 'Agenda de Consultas' : 'Base de Pacientes'}
+                {view === 'agendamentos' && 'Agenda de Consultas'}
+                {view === 'pacientes' && 'Base de Pacientes'}
+                {view === 'medicos' && 'Corpo Clínico (Médicos)'}
+                {view === 'especialidades' && 'Especialidades Médicas'}
               </h1>
               <p className="text-slate-500 mt-1 capitalize">{format(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
             </div>
             <div className="flex gap-3">
               <div className="bg-white border border-slate-200 rounded-lg px-4 py-2 flex items-center gap-2">
                 <span className="text-xs font-bold text-slate-400 uppercase">Total:</span>
-                <span className="text-lg font-bold text-slate-800">{view === 'agendamentos' ? appointments.length : patients.length}</span>
+                <span className="text-lg font-bold text-slate-800">
+                  {view === 'agendamentos' && appointments.length}
+                  {view === 'pacientes' && patients.length}
+                  {view === 'medicos' && doctors.length}
+                  {view === 'especialidades' && specialties.length}
+                </span>
               </div>
+              
+              {view === 'pacientes' && (
+                <button onClick={() => setShowPatientModal(true)} className="bg-blue-600 text-white rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-blue-700">
+                  <Plus className="w-4 h-4" /> Novo
+                </button>
+              )}
+              {view === 'medicos' && (
+                <button onClick={() => setShowDoctorModal(true)} className="bg-blue-600 text-white rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-blue-700">
+                  <Plus className="w-4 h-4" /> Novo
+                </button>
+              )}
+              {view === 'especialidades' && (
+                <button onClick={() => setShowSpecialtyModal(true)} className="bg-blue-600 text-white rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-blue-700">
+                  <Plus className="w-4 h-4" /> Nova
+                </button>
+              )}
             </div>
           </div>
 
@@ -210,21 +320,49 @@ export function SecretaryDashboard() {
                 <button onClick={() => setShowApptModal(true)} className="md:hidden text-xs bg-blue-600 text-white px-3 py-1.5 rounded font-bold">Novo Agendamento</button>
               </div>
             </div>
-          ) : (
+          ) : view === 'pacientes' ? (
             <div className="flex-1 overflow-auto min-h-0 py-2">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {patients.map(p => (
-                  <div key={p.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow transition">
-                    <div className="font-bold text-lg text-slate-900 mb-1">{p.full_name}</div>
-                    <div className="text-sm text-slate-500 flex flex-col gap-1">
-                      <span><strong className="font-medium text-slate-700">RG:</strong> {p.rg || 'Não informado'}</span>
-                      <span><strong className="font-medium text-slate-700">Fone:</strong> {p.phone || 'Não informado'}</span>
+                  <div key={p.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow transition flex justify-between items-start">
+                    <div>
+                      <div className="font-bold text-lg text-slate-900 mb-1">{p.full_name}</div>
+                      <div className="text-sm text-slate-500 flex flex-col gap-1">
+                        <span><strong className="font-medium text-slate-700">RG:</strong> {p.rg || 'Não informado'}</span>
+                        <span><strong className="font-medium text-slate-700">Fone:</strong> {p.phone || 'Não informado'}</span>
+                      </div>
                     </div>
+                    <button onClick={() => handleDeletePatient(p.id)} className="text-slate-400 hover:text-red-500">Excluir</button>
                   </div>
                 ))}
-                {patients.length === 0 && (
-                  <div className="col-span-full p-8 text-center text-slate-500 text-sm">Nenhum paciente encontrado.</div>
-                )}
+                {patients.length === 0 && <div className="col-span-full p-8 text-center text-slate-500">Nenhum paciente cadastrado.</div>}
+              </div>
+            </div>
+          ) : view === 'medicos' ? (
+            <div className="flex-1 overflow-auto min-h-0 py-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {doctors.map(d => (
+                  <div key={d.id} className="bg-white border border-slate-200 rounded-xl p-5 shadow-sm hover:shadow transition flex justify-between items-start">
+                    <div>
+                      <div className="font-bold text-lg text-slate-900 mb-1">{d.full_name}</div>
+                      <div className="text-sm text-slate-500">Médico Cadastrado</div>
+                    </div>
+                    <button onClick={() => handleDeleteDoctor(d.id)} className="text-slate-400 hover:text-red-500">Excluir</button>
+                  </div>
+                ))}
+                {doctors.length === 0 && <div className="col-span-full p-8 text-center text-slate-500">Nenhum médico cadastrado.</div>}
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto min-h-0 py-2">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {specialties.map(s => (
+                  <div key={s.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow transition flex justify-between items-center">
+                    <div className="font-bold text-slate-900">{s.name}</div>
+                    <button onClick={() => handleDeleteSpecialty(s.id)} className="text-slate-400 hover:text-red-500 text-sm">Excluir</button>
+                  </div>
+                ))}
+                {specialties.length === 0 && <div className="col-span-full p-8 text-center text-slate-500">Nenhuma especialidade cadastrada.</div>}
               </div>
             </div>
           )}
@@ -241,7 +379,7 @@ export function SecretaryDashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Paciente</label>
-                  <select required value={newAppt.patient_id} onChange={e=>setNewAppt({...newAppt, patient_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                  <select required value={newAppt.patient_id} onChange={e=>setNewAppt({...newAppt, patient_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
                     <option value="">Selecione...</option>
                     {patients.map(p => <option key={p.id} value={p.id}>{p.full_name}</option>)}
                   </select>
@@ -249,7 +387,7 @@ export function SecretaryDashboard() {
                 
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Médico Responsável</label>
-                  <select required value={newAppt.doctor_id} onChange={e=>setNewAppt({...newAppt, doctor_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                  <select required value={newAppt.doctor_id} onChange={e=>setNewAppt({...newAppt, doctor_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
                     <option value="">Selecione...</option>
                     {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
                   </select>
@@ -257,7 +395,7 @@ export function SecretaryDashboard() {
 
                 <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Especialidade</label>
-                  <select required value={newAppt.specialty_id} onChange={e=>setNewAppt({...newAppt, specialty_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500">
+                  <select required value={newAppt.specialty_id} onChange={e=>setNewAppt({...newAppt, specialty_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
                     <option value="">Selecione...</option>
                     {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
@@ -265,18 +403,101 @@ export function SecretaryDashboard() {
 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
-                  <input type="date" required value={newAppt.appointment_date} onChange={e=>setNewAppt({...newAppt, appointment_date: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                  <input type="date" required value={newAppt.appointment_date} onChange={e=>setNewAppt({...newAppt, appointment_date: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
                 </div>
                 
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Horário</label>
-                  <input type="time" required value={newAppt.appointment_time} onChange={e=>setNewAppt({...newAppt, appointment_time: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500" />
+                  <input type="time" required value={newAppt.appointment_time} onChange={e=>setNewAppt({...newAppt, appointment_time: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
                 </div>
               </div>
 
               <div className="flex justify-end gap-3 pt-6">
                 <button type="button" onClick={() => setShowApptModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium">Cancelar</button>
                 <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm">Confirmar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Patient Modal */}
+      {showPatientModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-6">Cadastrar Paciente</h3>
+            <form onSubmit={handleCreatePatient} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome Completo</label>
+                <input type="text" required value={newPatient.full_name} onChange={e=>setNewPatient({...newPatient, full_name: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">RG</label>
+                  <input type="text" required value={newPatient.rg} onChange={e=>setNewPatient({...newPatient, rg: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Telefone</label>
+                  <input type="text" value={newPatient.phone} onChange={e=>setNewPatient({...newPatient, phone: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Observações / Histórico</label>
+                <textarea rows={3} value={newPatient.notes} onChange={e=>setNewPatient({...newPatient, notes: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => setShowPatientModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium">Cancelar</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Cadastrar</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Doctor Modal */}
+      {showDoctorModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-6">Cadastrar Médico</h3>
+            <div className="mb-4 text-xs text-amber-700 bg-amber-50 p-3 rounded-lg border border-amber-200">
+              Após o cadastro, o médico poderá fazer login com este e-mail e senha no sistema.<br/><br/>
+              <strong>Importante:</strong> Certifique-se que no Supabase a opção "Confirm email" está DESABILITADA (Authentication &gt; Providers &gt; Email), senão o acesso ficará bloqueado.
+            </div>
+            <form onSubmit={handleCreateDoctor} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome do Médico (ex: Dr. João)</label>
+                <input type="text" required value={newDoctor.full_name} onChange={e=>setNewDoctor({...newDoctor, full_name: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">E-mail de Acesso</label>
+                <input type="email" required value={newDoctor.email} onChange={e=>setNewDoctor({...newDoctor, email: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Senha Provisória</label>
+                <input type="password" required value={newDoctor.password} onChange={e=>setNewDoctor({...newDoctor, password: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" minLength={6} />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => setShowDoctorModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium">Cancelar</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Cadastrar Médico</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Specialty Modal */}
+      {showSpecialtyModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-sm rounded-2xl p-8 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-6">Nova Especialidade</h3>
+            <form onSubmit={handleCreateSpecialty} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">Nome da Especialidade</label>
+                <input type="text" required value={newSpecialty.name} onChange={e=>setNewSpecialty({...newSpecialty, name: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+              </div>
+              <div className="flex justify-end gap-3 pt-4">
+                <button type="button" onClick={() => setShowSpecialtyModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 hover:bg-slate-50 font-medium">Cancelar</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">Salvar</button>
               </div>
             </form>
           </div>
