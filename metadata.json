@@ -1,0 +1,6 @@
+{
+  "name": "ConsultaMed - Agendamento",
+  "description": "Sistema PWA responsivo para agendamento médico com fluxos de secretaria e tela em tempo real para médicos.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
