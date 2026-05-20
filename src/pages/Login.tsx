@@ -52,7 +52,7 @@ export function Login() {
             <img src="/logo.png" alt="UNIPÊ Logo" className="max-w-full max-h-full object-contain" />
           </div>
           <h2 className="text-2xl font-bold text-white tracking-tight">Medicina <span className="text-[#FCA311]">UNIPÊ</span></h2>
-          <p className="text-blue-100 mt-2 text-sm font-medium">Acesso ao Sistema Integrado</p>
+          <p className="text-blue-100 mt-2 text-sm font-medium">Agendamento de Consultas do Internato</p>
         </div>
         
         <form onSubmit={handleLogin} className="p-8">

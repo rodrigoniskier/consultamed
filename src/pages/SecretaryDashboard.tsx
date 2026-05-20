@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { AppointmentWithDetails, Patient, Profile, Specialty } from '../types';
 import { LogOut, Plus, Users, Stethoscope, Search, Edit } from 'lucide-react';
 import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 // A single dashboard that contains basic Secretary views (simplified for the prompt)
 export function SecretaryDashboard() {
@@ -132,7 +133,7 @@ export function SecretaryDashboard() {
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
                 {view === 'agendamentos' ? 'Agenda de Consultas' : 'Base de Pacientes'}
               </h1>
-              <p className="text-slate-500 mt-1">{format(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy")}</p>
+              <p className="text-slate-500 mt-1 capitalize">{format(new Date(), "EEEE, dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</p>
             </div>
             <div className="flex gap-3">
               <div className="bg-white border border-slate-200 rounded-lg px-4 py-2 flex items-center gap-2">
