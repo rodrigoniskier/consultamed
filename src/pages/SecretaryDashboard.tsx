@@ -20,10 +20,14 @@ export function SecretaryDashboard() {
   
   // Forms States
   const [showApptModal, setShowApptModal] = useState(false);
-  const [newAppt, setNewAppt] = useState({ patient_id: '', specialty_id: '', doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado' });
+  const [newAppt, setNewAppt] = useState({ patient_id: '', specialty_id: '', doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado', appointment_type: 'primeira_vez', secretary_notes: '' });
+
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [newBlock, setNewBlock] = useState({ doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'bloqueado', secretary_notes: '' });
 
   const [showPatientModal, setShowPatientModal] = useState(false);
-  const [newPatient, setNewPatient] = useState({ full_name: '', rg: '', phone: '', notes: '' });
+  const [newPatient, setNewPatient] = useState({ full_name: '', rg: '', cpf: '', cartao_sus: '', birth_date: '', phone: '', notes: '' });
+
 
   const [showDoctorModal, setShowDoctorModal] = useState(false);
   const [newDoctor, setNewDoctor] = useState({ full_name: '', email: '', password: '' });
@@ -55,8 +59,25 @@ export function SecretaryDashboard() {
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
-    await supabase.from('appointments').insert([newAppt]);
+    await supabase.from('appointments').insert([{
+      ...newAppt, 
+      patient_id: parseInt(newAppt.patient_id), 
+      specialty_id: parseInt(newAppt.specialty_id)
+    }]);
     setShowApptModal(false);
+    setNewAppt({ patient_id: '', specialty_id: '', doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado', appointment_type: 'primeira_vez', secretary_notes: '' });
+    fetchData();
+  };
+
+  const handleCreateBlock = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await supabase.from('appointments').insert([{ 
+      ...newBlock, 
+      patient_id: null, 
+      specialty_id: null 
+    }]);
+    setShowBlockModal(false);
+    setNewBlock({ doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'bloqueado', secretary_notes: '' });
     fetchData();
   };
 
@@ -71,7 +92,7 @@ export function SecretaryDashboard() {
     e.preventDefault();
     await supabase.from('patients').insert([newPatient]);
     setShowPatientModal(false);
-    setNewPatient({ full_name: '', rg: '', phone: '', notes: '' });
+    setNewPatient({ full_name: '', rg: '', cpf: '', cartao_sus: '', birth_date: '', phone: '', notes: '' });
     fetchData();
   };
 
@@ -235,6 +256,16 @@ export function SecretaryDashboard() {
                 </span>
               </div>
               
+              {view === 'agendamentos' && (
+                <>
+                  <button onClick={() => setShowBlockModal(true)} className="bg-red-50 text-red-600 border border-red-200 rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-red-100 hidden md:flex">
+                    Bloquear Horário
+                  </button>
+                  <button onClick={() => setShowApptModal(true)} className="bg-blue-600 text-white rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-blue-700 hidden md:flex">
+                    <Plus className="w-4 h-4" /> Novo
+                  </button>
+                </>
+              )}
               {view === 'pacientes' && (
                 <button onClick={() => setShowPatientModal(true)} className="bg-blue-600 text-white rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-blue-700">
                   <Plus className="w-4 h-4" /> Novo
@@ -268,45 +299,65 @@ export function SecretaryDashboard() {
 
               <div className="flex-1 overflow-auto divide-y divide-slate-100">
                 {appointments.map(appt => (
-                  <div key={appt.id} className="grid grid-cols-6 px-4 md:px-6 py-4 items-center hover:bg-slate-50 transition-colors cursor-pointer group">
+                  <div key={appt.id} className={`grid grid-cols-6 px-4 md:px-6 py-4 items-center transition-colors cursor-pointer group ${appt.status === 'bloqueado' ? 'bg-red-50/50 hover:bg-red-50' : 'hover:bg-slate-50'}`}>
                     <div className="col-span-2 md:col-span-1">
-                      <p className={`font-mono font-bold ${appt.status === 'atendido' ? 'text-green-700' : 'text-slate-700'}`}>{appt.appointment_time || '00:00'}</p>
-                      <p className={`text-[10px] uppercase ${appt.status === 'atendido' ? 'text-green-400' : 'text-slate-400'}`}>{appt.turn}</p>
+                      <p className={`font-mono font-bold ${appt.status === 'atendido' ? 'text-green-700' : appt.status === 'bloqueado' ? 'text-red-700' : 'text-slate-700'}`}>{appt.appointment_time || '00:00'}</p>
+                      <p className={`text-[10px] uppercase ${appt.status === 'atendido' ? 'text-green-400' : appt.status === 'bloqueado' ? 'text-red-400' : 'text-slate-400'}`}>{appt.turn}</p>
                     </div>
                     <div className="col-span-4 md:col-span-2">
-                      <p className="font-semibold text-slate-800 line-clamp-1">{appt.patients?.full_name}</p>
-                      <p className="text-xs text-slate-500">{appt.patients?.rg ? `RG: ${appt.patients.rg}` : 'RG não informado'}</p>
-                      
-                      {/* Mobile Only Info */}
-                      <div className="md:hidden mt-2 flex flex-wrap gap-2 items-center">
-                         <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{appt.specialties?.name}</span>
-                         <span className={`text-[10px] font-bold capitalize ${
-                           appt.status === 'atendido' ? 'text-green-600' :
-                           appt.status === 'cancelado' || appt.status === 'faltou' ? 'text-red-600' :
-                           'text-blue-600'
-                         }`}>{appt.status}</span>
-                      </div>
+                       {appt.status === 'bloqueado' ? (
+                         <>
+                           <p className="font-semibold text-red-800 flex items-center gap-2">Horário Bloqueado</p>
+                           <p className="text-xs text-red-500 mt-1">{appt.secretary_notes}</p>
+                         </>
+                       ) : (
+                         <>
+                           <p className="font-semibold text-slate-800 line-clamp-1">{appt.patients?.full_name}</p>
+                           <p className="text-xs text-slate-500 flex gap-2">
+                             <span>CPF: {appt.patients?.cpf || '-'}</span> 
+                             <span>SUS: {appt.patients?.cartao_sus || '-'}</span>
+                           </p>
+                           
+                           {/* Mobile Only Info */}
+                           <div className="md:hidden mt-2 flex flex-wrap gap-2 items-center">
+                              <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{appt.specialties?.name}</span>
+                              <span className={`text-[10px] font-bold capitalize ${
+                                appt.status === 'atendido' ? 'text-green-600' :
+                                appt.status === 'cancelado' || appt.status === 'faltou' ? 'text-red-600' :
+                                'text-blue-600'
+                              }`}>{appt.status}</span>
+                              {appt.appointment_type && <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{appt.appointment_type.replace('_', ' ')}</span>}
+                           </div>
+                         </>
+                       )}
                     </div>
                     <div className="hidden md:block col-span-1">
-                      <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[11px] font-bold uppercase">{appt.specialties?.name}</span>
+                      {appt.status !== 'bloqueado' && appt.specialties && (
+                        <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[11px] font-bold uppercase">{appt.specialties?.name}</span>
+                      )}
                     </div>
                     <div className="hidden md:block col-span-1">
                       <p className="text-sm font-medium">{appt.profiles?.full_name}</p>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteAppointment(appt.id); }} className="text-[10px] uppercase font-bold text-red-500 hover:text-red-700 mt-1 transition-colors">Excluir Agendamento</button>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteAppointment(appt.id); }} className={`text-[10px] uppercase font-bold hover:text-red-700 mt-1 transition-colors ${appt.status === 'bloqueado' ? 'text-red-500' : 'text-red-400'}`}>
+                         {appt.status === 'bloqueado' ? 'Desbloquear' : 'Excluir Agendamento'}
+                      </button>
                     </div>
                     <div className="hidden md:block col-span-1">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${
                            appt.status === 'atendido' ? 'bg-green-500' :
-                           appt.status === 'cancelado' || appt.status === 'faltou' ? 'bg-red-500' :
+                           appt.status === 'cancelado' || appt.status === 'faltou' || appt.status === 'bloqueado' ? 'bg-red-500' :
                            'bg-blue-500'
                         }`}></div>
                         <span className={`text-xs font-bold capitalize ${
                            appt.status === 'atendido' ? 'text-green-600' :
-                           appt.status === 'cancelado' || appt.status === 'faltou' ? 'text-red-600' :
+                           appt.status === 'cancelado' || appt.status === 'faltou' || appt.status === 'bloqueado' ? 'text-red-600' :
                            'text-slate-600'
                         }`}>{appt.status}</span>
                       </div>
+                      {appt.appointment_type && appt.status !== 'bloqueado' && (
+                        <div className="mt-1 text-[10px] text-slate-500 uppercase font-medium">{appt.appointment_type.replace('_', ' ')}</div>
+                      )}
                     </div>
                   </div>
                 ))}
@@ -317,7 +368,10 @@ export function SecretaryDashboard() {
               
               <div className="h-12 border-t border-slate-100 flex items-center justify-between px-6 bg-slate-50/50 shrink-0">
                 <span className="text-xs text-slate-400 font-medium italic">Última atualização: Tempo Real (Supabase Connected)</span>
-                <button onClick={() => setShowApptModal(true)} className="md:hidden text-xs bg-blue-600 text-white px-3 py-1.5 rounded font-bold">Novo Agendamento</button>
+                <div className="flex gap-2">
+                   <button onClick={() => setShowBlockModal(true)} className="md:hidden text-xs bg-red-600 text-white px-3 py-1.5 rounded font-bold">Bloquear Horário</button>
+                   <button onClick={() => setShowApptModal(true)} className="md:hidden text-xs bg-blue-600 text-white px-3 py-1.5 rounded font-bold">Novo Agendamento</button>
+                </div>
               </div>
             </div>
           ) : view === 'pacientes' ? (
@@ -328,8 +382,11 @@ export function SecretaryDashboard() {
                     <div>
                       <div className="font-bold text-lg text-slate-900 mb-1">{p.full_name}</div>
                       <div className="text-sm text-slate-500 flex flex-col gap-1">
-                        <span><strong className="font-medium text-slate-700">RG:</strong> {p.rg || 'Não informado'}</span>
-                        <span><strong className="font-medium text-slate-700">Fone:</strong> {p.phone || 'Não informado'}</span>
+                        <span><strong className="font-medium text-slate-700">CPF:</strong> {p.cpf || '-'}</span>
+                        <span><strong className="font-medium text-slate-700">SUS:</strong> {p.cartao_sus || '-'}</span>
+                        <span><strong className="font-medium text-slate-700">RG:</strong> {p.rg || '-'}</span>
+                        <span><strong className="font-medium text-slate-700">Fone:</strong> {p.phone || '-'}</span>
+                        <span><strong className="font-medium text-slate-700">Nasc.:</strong> {p.birth_date ? new Date(p.birth_date).toLocaleDateString('pt-BR') : '-'}</span>
                       </div>
                     </div>
                     <button onClick={() => handleDeletePatient(p.id)} className="text-slate-400 hover:text-red-500">Excluir</button>
@@ -369,6 +426,50 @@ export function SecretaryDashboard() {
         </section>
       </main>
 
+      {/* Block Appointment Modal */}
+      {showBlockModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl">
+            <h3 className="text-xl font-bold text-red-600 mb-6 flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-600 inline-block"></span>
+              Bloquear Horário
+            </h3>
+            
+            <form onSubmit={handleCreateBlock} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Médico Responsável</label>
+                  <select required value={newBlock.doctor_id} onChange={e=>setNewBlock({...newBlock, doctor_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border">
+                    <option value="">Selecione...</option>
+                    {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                  </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+                  <input type="date" required value={newBlock.appointment_date} onChange={e=>setNewBlock({...newBlock, appointment_date: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border" />
+                </div>
+                
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Horário</label>
+                  <input type="time" required value={newBlock.appointment_time} onChange={e=>setNewBlock({...newBlock, appointment_time: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border" />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Motivo do Bloqueio</label>
+                  <textarea rows={2} value={newBlock.secretary_notes || ''} onChange={e=>setNewBlock({...newBlock, secretary_notes: e.target.value})} placeholder="Reunião, cirurgia, licença..." className="w-full rounded-lg border-slate-300 shadow-sm focus:border-red-500 focus:ring-red-500 p-2 border" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6">
+                <button type="button" onClick={() => setShowBlockModal(false)} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium">Cancelar</button>
+                <button type="submit" className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium shadow-sm">Confirmar Bloqueio</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Basic Create Appointment Modal */}
       {showApptModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -393,7 +494,7 @@ export function SecretaryDashboard() {
                   </select>
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-2 md:col-span-1">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Especialidade</label>
                   <select required value={newAppt.specialty_id} onChange={e=>setNewAppt({...newAppt, specialty_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
                     <option value="">Selecione...</option>
@@ -401,14 +502,28 @@ export function SecretaryDashboard() {
                   </select>
                 </div>
 
-                <div>
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Tipo de Consulta</label>
+                  <select required value={newAppt.appointment_type} onChange={e=>setNewAppt({...newAppt, appointment_type: e.target.value as any})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                    <option value="primeira_vez">Primeira Vez</option>
+                    <option value="retorno">Retorno</option>
+                    <option value="internato">Internato</option>
+                  </select>
+                </div>
+
+                <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
                   <input type="date" required value={newAppt.appointment_date} onChange={e=>setNewAppt({...newAppt, appointment_date: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
                 </div>
                 
-                <div>
+                <div className="col-span-2">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Horário</label>
                   <input type="time" required value={newAppt.appointment_time} onChange={e=>setNewAppt({...newAppt, appointment_time: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Observações da Secretária</label>
+                  <textarea rows={2} value={newAppt.secretary_notes || ''} onChange={e=>setNewAppt({...newAppt, secretary_notes: e.target.value})} placeholder="Adicione notas para o médico ou sobre o preparo..." className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
                 </div>
               </div>
 
@@ -433,13 +548,27 @@ export function SecretaryDashboard() {
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">RG</label>
-                  <input type="text" required value={newPatient.rg} onChange={e=>setNewPatient({...newPatient, rg: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Data de Nasc.</label>
+                  <input type="date" value={newPatient.birth_date} onChange={e=>setNewPatient({...newPatient, birth_date: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-slate-700 mb-1">Telefone</label>
                   <input type="text" value={newPatient.phone} onChange={e=>setNewPatient({...newPatient, phone: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
                 </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">CPF</label>
+                  <input type="text" value={newPatient.cpf} onChange={e=>setNewPatient({...newPatient, cpf: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Cartão SUS</label>
+                  <input type="text" value={newPatient.cartao_sus} onChange={e=>setNewPatient({...newPatient, cartao_sus: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-700 mb-1">RG</label>
+                <input type="text" value={newPatient.rg} onChange={e=>setNewPatient({...newPatient, rg: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 p-2 border focus:ring-blue-500" />
               </div>
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-1">Observações / Histórico</label>

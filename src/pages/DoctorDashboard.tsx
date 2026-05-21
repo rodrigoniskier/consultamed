@@ -86,7 +86,8 @@ export function DoctorDashboard() {
       case 'agendado': return <Calendar className="w-5 h-5 text-blue-500" />;
       case 'atendido': return <CheckCircle2 className="w-5 h-5 text-green-500" />;
       case 'faltou': return <XCircle className="w-5 h-5 text-red-500" />;
-      case 'cancelado': return <XCircle className="w-5 h-5 text-gray-500" />;
+      case 'cancelado': return <XCircle className="w-5 h-5 text-gray-400" />;
+      case 'bloqueado': return <XCircle className="w-5 h-5 text-red-600" />;
       default: return <Calendar className="w-5 h-5 text-blue-500" />;
     }
   };
@@ -120,8 +121,11 @@ export function DoctorDashboard() {
               return (
                 <div 
                   key={appt.id} 
-                  onClick={() => openAppt(appt)} // In a PWA, tappable cards are good UX
-                  className="bg-white rounded-xl p-4 shadow-sm border border-slate-200 active:scale-[0.98] transition cursor-pointer"
+                  onClick={() => appt.status !== 'bloqueado' && openAppt(appt)} // In a PWA, tappable cards are good UX. Bloqueado has no actions.
+                  className={cn(
+                    "bg-white rounded-xl p-4 shadow-sm border border-slate-200 transition",
+                    appt.status === 'bloqueado' ? "bg-red-50/30 opacity-75" : "active:scale-[0.98] cursor-pointer"
+                  )}
                 >
                   <div className="flex justify-between items-start mb-3">
                     <div className="flex items-center gap-2">
@@ -130,25 +134,58 @@ export function DoctorDashboard() {
                       )}>
                         {isApptToday ? 'Hoje' : format(new Date(appt.appointment_date + 'T00:00:00'), 'dd/MM/yyyy')}
                       </div>
-                      <div className="flex items-center text-slate-600 text-sm font-medium gap-1 bg-slate-100 px-2.5 py-1 rounded-md">
+                      <div className={cn("flex items-center text-sm font-medium gap-1 px-2.5 py-1 rounded-md",
+                        appt.status === 'bloqueado' ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-600"
+                      )}>
                         <Clock className="w-3.5 h-3.5" />
                         {appt.appointment_time}
                       </div>
+                      {appt.appointment_type && appt.status !== 'bloqueado' && (
+                        <div className="bg-purple-100 text-purple-700 px-2.5 py-1 rounded-md text-xs font-bold uppercase hidden sm:block">
+                          {appt.appointment_type.replace('_', ' ')}
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                        <StatusIcon status={appt.status} />
                     </div>
                   </div>
                   
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center font-bold text-lg">
-                      {appt.patients?.full_name?.charAt(0) || 'P'}
+                  {appt.status === 'bloqueado' ? (
+                    <div className="flex items-center gap-3">
+                       <div className="h-10 w-10 bg-red-100 text-red-500 rounded-full flex items-center justify-center">
+                         <XCircle className="w-5 h-5" />
+                       </div>
+                       <div>
+                         <h3 className="font-semibold text-red-800 leading-tight">Horário Bloqueado</h3>
+                         {appt.secretary_notes && <p className="text-sm text-red-600 mt-0.5">{appt.secretary_notes}</p>}
+                       </div>
                     </div>
-                    <div>
-                      <h3 className="font-semibold text-slate-900 leading-tight">{appt.patients?.full_name}</h3>
-                      <p className="text-sm text-slate-500 mt-0.5">{appt.specialties?.name}</p>
+                  ) : (
+                    <div className="flex items-start gap-3">
+                      <div className="h-10 w-10 bg-blue-100 text-blue-700 rounded-full flex shrink-0 items-center justify-center font-bold text-lg mt-0.5">
+                        {appt.patients?.full_name?.charAt(0) || 'P'}
+                      </div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <h3 className="font-semibold text-slate-900 leading-tight">{appt.patients?.full_name}</h3>
+                          {appt.appointment_type && (
+                            <div className="bg-purple-100 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase sm:hidden shrink-0">
+                              {appt.appointment_type.replace('_', ' ')}
+                            </div>
+                          )}
+                        </div>
+                        <p className="text-sm text-slate-500 mt-0.5">{appt.specialties?.name}</p>
+                        
+                        {appt.secretary_notes && (
+                          <div className="mt-3 bg-yellow-50 border border-yellow-100 rounded-lg p-2.5 text-sm text-yellow-800">
+                            <strong>Notas da Secretária:</strong>
+                            <p className="mt-0.5 italic">{appt.secretary_notes}</p>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               );
             })}
