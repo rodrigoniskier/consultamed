@@ -85,7 +85,7 @@ export function DoctorDashboard() {
     switch (status) {
       case 'agendado': return <Calendar className="w-5 h-5 text-blue-500" />;
       case 'atendido': return <CheckCircle2 className="w-5 h-5 text-green-500" />;
-      case 'faltou': return <XCircle className="w-5 h-5 text-red-500" />;
+      case 'nao_compareceu': return <XCircle className="w-5 h-5 text-red-500" />;
       case 'cancelado': return <XCircle className="w-5 h-5 text-gray-400" />;
       case 'bloqueado': return <XCircle className="w-5 h-5 text-red-600" />;
       default: return <Calendar className="w-5 h-5 text-blue-500" />;
@@ -222,7 +222,7 @@ export function DoctorDashboard() {
                 >
                   <option value="agendado">Agendado</option>
                   <option value="atendido">Atendido</option>
-                  <option value="faltou">Faltou</option>
+                  <option value="nao_compareceu">Não Compareceu</option>
                   <option value="cancelado">Cancelado</option>
                 </select>
               </div>

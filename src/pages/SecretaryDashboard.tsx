@@ -1,8 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { supabase, supabaseAuthHelper } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { AppointmentWithDetails, Patient, Profile, Specialty } from '../types';
-import { LogOut, Plus, Users, Stethoscope, Search, Edit } from 'lucide-react';
+import { AppointmentWithDetails, Patient, Profile, Specialty, Location } from '../types';
+import { LogOut, Plus, Users, Stethoscope, Search, Edit, Map, Printer } from 'lucide-react';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
@@ -14,13 +14,19 @@ export function SecretaryDashboard() {
   const [patients, setPatients] = useState<Patient[]>([]);
   const [doctors, setDoctors] = useState<Profile[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
+  const [locations, setLocations] = useState<Location[]>([]);
   
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'agendamentos' | 'pacientes' | 'medicos' | 'especialidades'>('agendamentos');
+  const [view, setView] = useState<'agendamentos' | 'pacientes' | 'medicos' | 'especialidades' | 'mapa_visual'>('agendamentos');
   
   // Forms States
   const [showApptModal, setShowApptModal] = useState(false);
-  const [newAppt, setNewAppt] = useState({ patient_id: '', specialty_id: '', doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado', appointment_type: 'primeira_vez', secretary_notes: '' });
+  const [newAppt, setNewAppt] = useState({ patient_id: '', specialty_id: '', doctor_id: '', location_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado', appointment_type: 'primeira_vez', secretary_notes: '', has_referral: false });
+
+  const [showEditApptModal, setShowEditApptModal] = useState(false);
+  const [editAppt, setEditAppt] = useState<any>(null);
+
+  const [mapFilter, setMapFilter] = useState({ date: format(new Date(), 'yyyy-MM-dd'), doctor_id: '', specialty_id: '', location_id: '' });
 
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [newBlock, setNewBlock] = useState({ doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'bloqueado', secretary_notes: '' });
@@ -42,30 +48,66 @@ export function SecretaryDashboard() {
   const fetchData = async () => {
     setLoading(true);
     
-    const [apptsRes, patRes, docRes, specRes] = await Promise.all([
-      supabase.from('appointments').select('*, patients(*), specialties(*), profiles(*)').order('appointment_date', { ascending: false }),
+    const [apptsRes, patRes, docRes, specRes, locRes] = await Promise.all([
+      supabase.from('appointments').select('*, patients(*), specialties(*), profiles(*), locations(*)').order('appointment_date', { ascending: false }),
       supabase.from('patients').select('*').order('full_name'),
       supabase.from('profiles').select('*').eq('role', 'medico'),
-      supabase.from('specialties').select('*')
+      supabase.from('specialties').select('*'),
+      supabase.from('locations').select('*')
     ]);
 
     if (apptsRes.data) setAppointments(apptsRes.data as unknown as AppointmentWithDetails[]);
     if (patRes.data) setPatients(patRes.data);
     if (docRes.data) setDoctors(docRes.data as Profile[]);
     if (specRes.data) setSpecialties(specRes.data);
+    if (locRes.data) setLocations(locRes.data);
     
     setLoading(false);
   };
 
   const handleCreateAppointment = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (newAppt.appointment_type === 'primeira_vez' || newAppt.appointment_type === 'retorno') {
+      const doc = doctors.find(d => d.id === newAppt.doctor_id);
+      if (doc) {
+        const todayAppts = appointments.filter(a => a.doctor_id === doc.id && a.appointment_date === newAppt.appointment_date && a.status !== 'cancelado' && a.status !== 'bloqueado');
+        const countFirst = todayAppts.filter(a => a.appointment_type === 'primeira_vez').length;
+        const countReturn = todayAppts.filter(a => a.appointment_type === 'retorno').length;
+
+        if (newAppt.appointment_type === 'primeira_vez' && doc.max_primeira_vez != null && countFirst >= doc.max_primeira_vez) {
+          alert(`Limite de vagas para Primeira Vez atingido para este médico neste dia (Máx: ${doc.max_primeira_vez}).`);
+          return;
+        }
+        if (newAppt.appointment_type === 'retorno' && doc.max_retorno != null && countReturn >= doc.max_retorno) {
+          alert(`Limite de vagas para Retorno atingido para este médico neste dia (Máx: ${doc.max_retorno}).`);
+          return;
+        }
+      }
+    }
+
     await supabase.from('appointments').insert([{
       ...newAppt, 
       patient_id: parseInt(newAppt.patient_id), 
-      specialty_id: parseInt(newAppt.specialty_id)
+      specialty_id: parseInt(newAppt.specialty_id),
+      location_id: newAppt.location_id ? parseInt(newAppt.location_id) : null
     }]);
     setShowApptModal(false);
-    setNewAppt({ patient_id: '', specialty_id: '', doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado', appointment_type: 'primeira_vez', secretary_notes: '' });
+    setNewAppt({ patient_id: '', specialty_id: '', doctor_id: '', location_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado', appointment_type: 'primeira_vez', secretary_notes: '', has_referral: false });
+    fetchData();
+  };
+
+  const handleUpdateAppointment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editAppt) return;
+    await supabase.from('appointments').update({
+      doctor_id: editAppt.doctor_id,
+      appointment_date: editAppt.appointment_date,
+      appointment_time: editAppt.appointment_time,
+      location_id: editAppt.location_id ? parseInt(editAppt.location_id) : null
+    }).eq('id', editAppt.id);
+    setShowEditApptModal(false);
+    setEditAppt(null);
     fetchData();
   };
 
@@ -156,9 +198,9 @@ export function SecretaryDashboard() {
   };
 
   return (
-    <div className="h-screen bg-slate-50 text-slate-900 flex flex-col font-sans select-none overflow-hidden">
+    <div className="h-screen bg-slate-50 text-slate-900 flex flex-col font-sans select-none overflow-hidden print:bg-white print:h-auto">
       {/* Top Navigation Bar */}
-      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10 shadow-sm">
+      <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-6 shrink-0 z-10 shadow-sm print:hidden">
         <div className="flex items-center gap-8">
           <div className="flex items-center gap-4">
             <img src="/logo.png" alt="UNIPÊ Logo" className="h-10 object-contain" />
@@ -189,7 +231,7 @@ export function SecretaryDashboard() {
 
       <main className="flex-1 flex overflow-hidden">
         {/* Sidebar Filters */}
-        <aside className="w-64 border-r border-slate-200 bg-white p-6 hidden md:flex flex-col gap-6">
+        <aside className="w-64 border-r border-slate-200 bg-white p-6 hidden md:flex flex-col gap-6 print:hidden">
           <div>
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4">Ações Rápidas</h3>
             <button onClick={() => setShowApptModal(true)} className="w-full bg-blue-600 text-white rounded-xl py-3 px-4 font-semibold text-sm flex items-center justify-center gap-2 shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all">
@@ -201,6 +243,10 @@ export function SecretaryDashboard() {
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Navegação</h3>
             <div className="flex flex-col gap-2">
+              <label onClick={() => setView('mapa_visual')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'mapa_visual' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <Map className="w-4 h-4 text-blue-600" />
+                <span>Mapa Visual</span>
+              </label>
               <label onClick={() => setView('agendamentos')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'agendamentos' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
                 <Stethoscope className="w-4 h-4 text-blue-600" />
                 <span>Agendamentos</span>
@@ -234,10 +280,11 @@ export function SecretaryDashboard() {
         </aside>
 
         {/* Main Table View */}
-        <section className="flex-1 flex flex-col p-4 md:p-8 gap-4 md:gap-8 bg-slate-50 overflow-hidden">
+        <section className="flex-1 flex flex-col p-4 md:p-8 gap-4 md:gap-8 bg-slate-50 overflow-hidden print:hidden">
           <div className="flex flex-col md:flex-row md:items-end justify-between shrink-0 gap-4">
             <div>
               <h1 className="text-2xl md:text-3xl font-bold text-slate-900 tracking-tight">
+                {view === 'mapa_visual' && 'Mapa Visual de Atendimentos'}
                 {view === 'agendamentos' && 'Agenda de Consultas'}
                 {view === 'pacientes' && 'Base de Pacientes'}
                 {view === 'medicos' && 'Corpo Clínico (Médicos)'}
@@ -256,8 +303,21 @@ export function SecretaryDashboard() {
                 </span>
               </div>
               
+              {view === 'mapa_visual' && (
+                <>
+                  <button onClick={() => window.print()} className="bg-white border border-slate-200 text-slate-700 rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-slate-50 hidden md:flex">
+                    <Printer className="w-4 h-4" /> Imprimir Mapa
+                  </button>
+                  <button onClick={() => setShowBlockModal(true)} className="bg-red-50 text-red-600 border border-red-200 rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-red-100 hidden md:flex">
+                    Bloquear Horário
+                  </button>
+                </>
+              )}
               {view === 'agendamentos' && (
                 <>
+                  <button onClick={() => window.print()} className="bg-white border border-slate-200 text-slate-700 rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-slate-50 hidden md:flex">
+                    <Printer className="w-4 h-4" /> Mapa Diário
+                  </button>
                   <button onClick={() => setShowBlockModal(true)} className="bg-red-50 text-red-600 border border-red-200 rounded-lg px-4 py-2 font-semibold text-sm flex items-center gap-2 hover:bg-red-100 hidden md:flex">
                     Bloquear Horário
                   </button>
@@ -323,9 +383,9 @@ export function SecretaryDashboard() {
                               <span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{appt.specialties?.name}</span>
                               <span className={`text-[10px] font-bold capitalize ${
                                 appt.status === 'atendido' ? 'text-green-600' :
-                                appt.status === 'cancelado' || appt.status === 'faltou' ? 'text-red-600' :
+                                appt.status === 'cancelado' || appt.status === 'nao_compareceu' ? 'text-red-600' :
                                 'text-blue-600'
-                              }`}>{appt.status}</span>
+                              }`}>{appt.status === 'nao_compareceu' ? 'não compareceu' : appt.status}</span>
                               {appt.appointment_type && <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{appt.appointment_type.replace('_', ' ')}</span>}
                            </div>
                          </>
@@ -338,22 +398,29 @@ export function SecretaryDashboard() {
                     </div>
                     <div className="hidden md:block col-span-1">
                       <p className="text-sm font-medium">{appt.profiles?.full_name}</p>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteAppointment(appt.id); }} className={`text-[10px] uppercase font-bold hover:text-red-700 mt-1 transition-colors ${appt.status === 'bloqueado' ? 'text-red-500' : 'text-red-400'}`}>
-                         {appt.status === 'bloqueado' ? 'Desbloquear' : 'Excluir Agendamento'}
-                      </button>
+                      <div className="flex items-center gap-2 mt-1">
+                        <button onClick={(e) => { e.stopPropagation(); handleDeleteAppointment(appt.id); }} className={`text-[10px] uppercase font-bold hover:text-red-700 transition-colors ${appt.status === 'bloqueado' ? 'text-red-500' : 'text-red-400'}`}>
+                           {appt.status === 'bloqueado' ? 'Desbloquear' : 'Excluir'}
+                        </button>
+                        {appt.status !== 'bloqueado' && (
+                          <button onClick={(e) => { e.stopPropagation(); setEditAppt(appt); setShowEditApptModal(true); }} className="text-[10px] uppercase font-bold text-blue-500 hover:text-blue-700 transition-colors">
+                             Editar
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="hidden md:block col-span-1">
                       <div className="flex items-center gap-2">
                         <div className={`w-2 h-2 rounded-full ${
                            appt.status === 'atendido' ? 'bg-green-500' :
-                           appt.status === 'cancelado' || appt.status === 'faltou' || appt.status === 'bloqueado' ? 'bg-red-500' :
+                           appt.status === 'cancelado' || appt.status === 'nao_compareceu' || appt.status === 'bloqueado' ? 'bg-red-500' :
                            'bg-blue-500'
                         }`}></div>
                         <span className={`text-xs font-bold capitalize ${
                            appt.status === 'atendido' ? 'text-green-600' :
-                           appt.status === 'cancelado' || appt.status === 'faltou' || appt.status === 'bloqueado' ? 'text-red-600' :
+                           appt.status === 'cancelado' || appt.status === 'nao_compareceu' || appt.status === 'bloqueado' ? 'text-red-600' :
                            'text-slate-600'
-                        }`}>{appt.status}</span>
+                        }`}>{appt.status === 'nao_compareceu' ? 'não compareceu' : appt.status}</span>
                       </div>
                       {appt.appointment_type && appt.status !== 'bloqueado' && (
                         <div className="mt-1 text-[10px] text-slate-500 uppercase font-medium">{appt.appointment_type.replace('_', ' ')}</div>
@@ -373,6 +440,65 @@ export function SecretaryDashboard() {
                    <button onClick={() => setShowApptModal(true)} className="md:hidden text-xs bg-blue-600 text-white px-3 py-1.5 rounded font-bold">Novo Agendamento</button>
                 </div>
               </div>
+            </div>
+          ) : view === 'mapa_visual' ? (
+            <div className="flex-1 overflow-auto min-h-0 bg-white rounded-2xl border border-slate-200 p-6">
+               <div className="flex flex-col md:flex-row gap-4 mb-6">
+                 <div>
+                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Data</label>
+                   <input type="date" value={mapFilter.date} onChange={e=>setMapFilter({...mapFilter, date: e.target.value})} className="border rounded-lg p-2 text-sm" />
+                 </div>
+                 <div>
+                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Médico</label>
+                   <select value={mapFilter.doctor_id} onChange={e=>setMapFilter({...mapFilter, doctor_id: e.target.value})} className="border rounded-lg p-2 text-sm w-full md:w-48">
+                      <option value="">Todos</option>
+                      {doctors.map(d=><option key={d.id} value={d.id}>{d.full_name}</option>)}
+                   </select>
+                 </div>
+                 <div>
+                   <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Local / Sala</label>
+                   <select value={mapFilter.location_id} onChange={e=>setMapFilter({...mapFilter, location_id: e.target.value})} className="border rounded-lg p-2 text-sm w-full md:w-48">
+                      <option value="">Todos</option>
+                      {locations.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}
+                   </select>
+                 </div>
+               </div>
+
+               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                  {Array.from({length: 21}).map((_, i) => {
+                     const hour = Math.floor(i / 2) + 8;
+                     const min = i % 2 === 0 ? '00' : '30';
+                     const timeStr = `${hour.toString().padStart(2, '0')}:${min}`;
+                     
+                     const matchedAppts = appointments.filter(a => 
+                       a.appointment_date === mapFilter.date &&
+                       (!mapFilter.doctor_id || a.doctor_id === mapFilter.doctor_id) &&
+                       (!mapFilter.location_id || String(a.location_id) === mapFilter.location_id)
+                     );
+                     
+                     const myAppt = matchedAppts.find(a => a.appointment_time === timeStr);
+
+                     return (
+                       <div key={timeStr} 
+                            onClick={() => {
+                               if (!myAppt) {
+                                  setNewAppt({...newAppt, appointment_date: mapFilter.date, doctor_id: mapFilter.doctor_id, location_id: mapFilter.location_id, appointment_time: timeStr});
+                                  setShowApptModal(true);
+                               }
+                            }}
+                            className={`p-3 rounded-xl border ${myAppt ? (myAppt.status === 'bloqueado' ? 'bg-red-50 border-red-200 cursor-not-allowed' : 'bg-blue-50 border-blue-200') : 'bg-white border-slate-200 hover:border-blue-400 cursor-pointer'} flex flex-col gap-1 transition-all`}>
+                          <span className="font-mono text-sm font-bold text-slate-700">{timeStr}</span>
+                          {myAppt ? (
+                            <span className={`text-[10px] font-semibold uppercase ${myAppt.status === 'bloqueado' ? 'text-red-600' : 'text-blue-700 line-clamp-1'}`}>
+                               {myAppt.status === 'bloqueado' ? 'Bloqueado' : myAppt.patients?.full_name}
+                            </span>
+                          ) : (
+                            <span className="text-[10px] text-slate-400">Livre</span>
+                          )}
+                       </div>
+                     );
+                  })}
+               </div>
             </div>
           ) : view === 'pacientes' ? (
             <div className="flex-1 overflow-auto min-h-0 py-2">
@@ -495,6 +621,14 @@ export function SecretaryDashboard() {
                 </div>
 
                 <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Local / Sala</label>
+                  <select value={newAppt.location_id} onChange={e=>setNewAppt({...newAppt, location_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                    <option value="">Selecione...</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="col-span-2 md:col-span-1">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Especialidade</label>
                   <select required value={newAppt.specialty_id} onChange={e=>setNewAppt({...newAppt, specialty_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
                     <option value="">Selecione...</option>
@@ -511,7 +645,14 @@ export function SecretaryDashboard() {
                   </select>
                 </div>
 
-                <div className="col-span-2">
+                <div className="col-span-2 md:col-span-1 flex items-center justify-start mt-6">
+                  <label className="flex items-center gap-2 cursor-pointer text-sm font-medium text-slate-700">
+                    <input type="checkbox" checked={newAppt.has_referral} onChange={e=>setNewAppt({...newAppt, has_referral: e.target.checked})} className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500" />
+                    Paciente possui Encaminhamento
+                  </label>
+                </div>
+
+                <div className="col-span-2 md:col-span-1">
                   <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
                   <input type="date" required value={newAppt.appointment_date} onChange={e=>setNewAppt({...newAppt, appointment_date: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
                 </div>
@@ -614,6 +755,53 @@ export function SecretaryDashboard() {
         </div>
       )}
 
+      {/* Edit Appointment Modal */}
+      {showEditApptModal && editAppt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 print:hidden">
+          <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+              <Edit className="w-5 h-5 text-blue-600" />
+              Editar Agendamento
+            </h3>
+            
+            <form onSubmit={handleUpdateAppointment} className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Médico Responsável</label>
+                  <select required value={editAppt.doctor_id} onChange={e=>setEditAppt({...editAppt, doctor_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                    <option value="">Selecione...</option>
+                    {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                  </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Local / Sala</label>
+                  <select value={editAppt.location_id || ''} onChange={e=>setEditAppt({...editAppt, location_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                    <option value="">Selecione...</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Data</label>
+                  <input type="date" required value={editAppt.appointment_date} onChange={e=>setEditAppt({...editAppt, appointment_date: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
+                </div>
+                
+                <div className="col-span-2 md:col-span-1">
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Horário</label>
+                  <input type="time" required value={editAppt.appointment_time} onChange={e=>setEditAppt({...editAppt, appointment_time: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-3 pt-6">
+                <button type="button" onClick={() => { setShowEditApptModal(false); setEditAppt(null); }} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium">Cancelar</button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm">Salvar Alterações</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Specialty Modal */}
       {showSpecialtyModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">
@@ -632,6 +820,44 @@ export function SecretaryDashboard() {
           </div>
         </div>
       )}
+      {/* Print View */}
+      <div className="hidden print:block p-8 bg-white text-black min-h-screen">
+        <h1 className="text-2xl font-bold text-center mb-6">Mapa de Atendimento Diário</h1>
+        {mapFilter.doctor_id ? (
+           <div className="mb-4">
+             <p><strong>Profissional:</strong> {doctors.find(d=>d.id === mapFilter.doctor_id)?.full_name || 'Todos'}</p>
+             <p><strong>Data:</strong> {format(new Date(mapFilter.date), 'dd/MM/yyyy')}</p>
+           </div>
+        ) : (
+           <div className="mb-4">
+             <p><strong>Data:</strong> {format(new Date(mapFilter.date), 'dd/MM/yyyy')}</p>
+             <p className="text-xs text-slate-500">Selecione um médico no Mapa Visual ou Agenda para uma impressão específica.</p>
+           </div>
+        )}
+        <table className="w-full border-collapse border border-black max-w-full">
+          <thead>
+            <tr>
+              <th className="border border-black p-2 text-left text-sm w-32">Turno/Hora</th>
+              <th className="border border-black p-2 text-left text-sm">Paciente</th>
+              <th className="border border-black p-2 text-left text-sm w-32">RG</th>
+              <th className="border border-black p-2 text-left text-sm w-48">Assinatura do Paciente</th>
+            </tr>
+          </thead>
+          <tbody>
+             {appointments.filter(a => a.status !== 'bloqueado' && (!mapFilter.doctor_id || a.doctor_id === mapFilter.doctor_id) && a.appointment_date === mapFilter.date).map(a => (
+               <tr key={a.id}>
+                 <td className="border border-black p-2 text-sm">{a.turn.substring(0,1)} - {a.appointment_time}</td>
+                 <td className="border border-black p-2 text-sm truncate">{a.patients?.full_name}</td>
+                 <td className="border border-black p-2 text-sm">{a.patients?.rg || '-'}</td>
+                 <td className="border border-black p-2 h-10 w-48"></td>
+               </tr>
+             ))}
+             {appointments.filter(a => a.status !== 'bloqueado' && (!mapFilter.doctor_id || a.doctor_id === mapFilter.doctor_id) && a.appointment_date === mapFilter.date).length === 0 && (
+                <tr><td colSpan={4} className="p-4 text-center border-black border text-slate-500 italic">Nenhum agendamento para este filtro.</td></tr>
+             )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

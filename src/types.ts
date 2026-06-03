@@ -2,6 +2,13 @@ export type Profile = {
   id: string;
   full_name: string;
   role: 'secretaria' | 'medico';
+  max_primeira_vez?: number | null;
+  max_retorno?: number | null;
+};
+
+export type Location = {
+  id: number;
+  name: string;
 };
 
 export type Specialty = {
@@ -25,11 +32,13 @@ export type Appointment = {
   patient_id: number | null;
   specialty_id: number | null;
   doctor_id: string;
+  location_id?: number | null;
   appointment_date: string; // DATE representation
   appointment_time: string;
   turn: 'MANHÃ' | 'TARDE' | 'NOITE';
   appointment_type: 'primeira_vez' | 'retorno' | 'internato' | null;
-  status: 'agendado' | 'atendido' | 'faltou' | 'cancelado' | 'bloqueado';
+  status: 'agendado' | 'atendido' | 'nao_compareceu' | 'cancelado' | 'bloqueado';
+  has_referral?: boolean;
   secretary_notes: string | null;
   medical_notes: string | null;
 };
@@ -38,5 +47,6 @@ export type Appointment = {
 export type AppointmentWithDetails = Appointment & {
   patients?: Patient;
   specialties?: Specialty;
+  locations?: Location;
   profiles: Profile; // The doctor's profile
 };
