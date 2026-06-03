@@ -2,8 +2,8 @@ import React, { useEffect, useState } from 'react';
 import { supabase, supabaseAuthHelper } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { AppointmentWithDetails, Patient, Profile, Specialty, Location } from '../types';
-import { LogOut, Plus, Users, Stethoscope, Search, Edit, Map, Printer } from 'lucide-react';
-import { format } from 'date-fns';
+import { LogOut, Plus, Users, Stethoscope, Search, Edit, Map, Printer, Calendar } from 'lucide-react';
+import { format, startOfMonth, endOfMonth, eachDayOfInterval } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // A single dashboard that contains basic Secretary views (simplified for the prompt)
@@ -15,9 +15,11 @@ export function SecretaryDashboard() {
   const [doctors, setDoctors] = useState<Profile[]>([]);
   const [specialties, setSpecialties] = useState<Specialty[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [rooms, setRooms] = useState<any[]>([]);
+  const [shifts, setShifts] = useState<any[]>([]);
   
   const [loading, setLoading] = useState(true);
-  const [view, setView] = useState<'agendamentos' | 'pacientes' | 'medicos' | 'especialidades' | 'mapa_visual'>('agendamentos');
+  const [view, setView] = useState<'agendamentos' | 'pacientes' | 'medicos' | 'especialidades' | 'mapa_visual' | 'mapa_salas'>('agendamentos');
   
   // Forms States
   const [showApptModal, setShowApptModal] = useState(false);
@@ -27,6 +29,11 @@ export function SecretaryDashboard() {
   const [editAppt, setEditAppt] = useState<any>(null);
 
   const [mapFilter, setMapFilter] = useState({ date: format(new Date(), 'yyyy-MM-dd'), doctor_id: '', specialty_id: '', location_id: '' });
+  
+  const [shiftsFilter, setShiftsFilter] = useState({ month: new Date(), location_id: '' });
+  const [showShiftModal, setShowShiftModal] = useState(false);
+  const [newShift, setNewShift] = useState({ shift_date: '', turn: 'MANHÃ', doctor_id: '', room_id: '', specialty_id: '' });
+  const [selectedShiftForEdit, setSelectedShiftForEdit] = useState<any>(null);
 
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [newBlock, setNewBlock] = useState({ doctor_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'bloqueado', secretary_notes: '' });
@@ -48,12 +55,14 @@ export function SecretaryDashboard() {
   const fetchData = async () => {
     setLoading(true);
     
-    const [apptsRes, patRes, docRes, specRes, locRes] = await Promise.all([
+    const [apptsRes, patRes, docRes, specRes, locRes, roomsRes, shiftsRes] = await Promise.all([
       supabase.from('appointments').select('*, patients(*), specialties(*), profiles(*), locations(*)').order('appointment_date', { ascending: false }),
       supabase.from('patients').select('*').order('full_name'),
       supabase.from('profiles').select('*').eq('role', 'medico'),
       supabase.from('specialties').select('*'),
-      supabase.from('locations').select('*')
+      supabase.from('locations').select('*'),
+      supabase.from('rooms').select('*'),
+      supabase.from('doctor_shifts').select('*, profiles(*), specialties(*)')
     ]);
 
     if (apptsRes.data) setAppointments(apptsRes.data as unknown as AppointmentWithDetails[]);
@@ -61,6 +70,8 @@ export function SecretaryDashboard() {
     if (docRes.data) setDoctors(docRes.data as Profile[]);
     if (specRes.data) setSpecialties(specRes.data);
     if (locRes.data) setLocations(locRes.data);
+    if (roomsRes.data) setRooms(roomsRes.data);
+    if (shiftsRes.data) setShifts(shiftsRes.data);
     
     setLoading(false);
   };
@@ -95,6 +106,32 @@ export function SecretaryDashboard() {
     setShowApptModal(false);
     setNewAppt({ patient_id: '', specialty_id: '', doctor_id: '', location_id: '', appointment_date: '', appointment_time: '', turn: 'MANHÃ', status: 'agendado', appointment_type: 'primeira_vez', secretary_notes: '', has_referral: false });
     fetchData();
+  };
+
+  const handleSaveShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (selectedShiftForEdit) {
+      await supabase.from('doctor_shifts').update({
+        doctor_id: newShift.doctor_id,
+        specialty_id: newShift.specialty_id
+      }).eq('id', selectedShiftForEdit.id);
+    } else {
+      await supabase.from('doctor_shifts').insert([newShift]);
+    }
+    setShowShiftModal(false);
+    setNewShift({ shift_date: '', turn: 'MANHÃ', doctor_id: '', room_id: '', specialty_id: '' });
+    setSelectedShiftForEdit(null);
+    fetchData();
+  };
+
+  const handleDeleteShift = async (id: number) => {
+    if (window.confirm("Deseja remover este médico da escala?")) {
+      await supabase.from('doctor_shifts').delete().eq('id', id);
+      setShowShiftModal(false);
+      setNewShift({ shift_date: '', turn: 'MANHÃ', doctor_id: '', room_id: '', specialty_id: '' });
+      setSelectedShiftForEdit(null);
+      fetchData();
+    }
   };
 
   const handleUpdateAppointment = async (e: React.FormEvent) => {
@@ -243,9 +280,13 @@ export function SecretaryDashboard() {
           <div className="space-y-4">
             <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">Navegação</h3>
             <div className="flex flex-col gap-2">
-              <label onClick={() => setView('mapa_visual')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'mapa_visual' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+              <label onClick={() => setView('mapa_salas')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'mapa_salas' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
                 <Map className="w-4 h-4 text-blue-600" />
-                <span>Mapa Visual</span>
+                <span>Gestão de Escalas</span>
+              </label>
+              <label onClick={() => setView('mapa_visual')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'mapa_visual' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
+                <Calendar className="w-4 h-4 text-blue-600" />
+                <span>Mapa Visual (Diário)</span>
               </label>
               <label onClick={() => setView('agendamentos')} className={`flex items-center gap-3 text-sm cursor-pointer p-2 rounded-lg transition-colors ${view === 'agendamentos' ? 'bg-slate-50 text-slate-900 font-medium' : 'text-slate-600 hover:bg-slate-50'}`}>
                 <Stethoscope className="w-4 h-4 text-blue-600" />
@@ -441,6 +482,70 @@ export function SecretaryDashboard() {
                 </div>
               </div>
             </div>
+          ) : view === 'mapa_salas' ? (
+            <div className="flex-1 overflow-auto min-h-0 bg-white rounded-2xl border border-slate-200 flex flex-col">
+              <div className="p-4 border-b border-slate-200 bg-slate-50 flex gap-4 items-end">
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Mês</label>
+                  <input type="month" value={format(shiftsFilter.month, 'yyyy-MM')} onChange={e => {
+                    const [y, m] = e.target.value.split('-');
+                    if (y && m) setShiftsFilter({...shiftsFilter, month: new Date(parseInt(y), parseInt(m) - 1, 1)});
+                  }} className="border border-slate-300 rounded p-1.5 text-sm" />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Local</label>
+                  <select value={shiftsFilter.location_id} onChange={e=>setShiftsFilter({...shiftsFilter, location_id: e.target.value})} className="border border-slate-300 rounded p-1.5 text-sm w-48">
+                    <option value="">Selecione...</option>
+                    {locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                  </select>
+                </div>
+              </div>
+              
+              {!shiftsFilter.location_id ? (
+                <div className="flex-1 flex items-center justify-center text-slate-400">Selecione um local para visualizar as escalas.</div>
+              ) : (
+                <div className="flex-1 overflow-auto p-4">
+                  <div className="flex">
+                     <div className="w-32 shrink-0 border-r border-slate-200">
+                        <div className="h-10 border-b border-slate-200"></div>
+                        {rooms.filter(r => String(r.location_id) === shiftsFilter.location_id).map(r => (
+                          <div key={r.id} className="h-16 flex items-center px-2 border-b border-slate-200 font-bold text-sm text-slate-700 bg-slate-50">{r.name}</div>
+                        ))}
+                     </div>
+                     <div className="flex-1 overflow-x-auto select-none">
+                       <div className="flex w-max shrink-0">
+                         {eachDayOfInterval({start: startOfMonth(shiftsFilter.month), end: endOfMonth(shiftsFilter.month)}).map(d => (
+                            <div key={d.toISOString()} className="w-24 shrink-0 px-2 py-1 border-b border-slate-200 text-center font-bold text-xs sticky top-0 bg-white z-10 border-r">
+                               {format(d, 'dd/MM')}
+                            </div>
+                         ))}
+                       </div>
+                       {rooms.filter(r => String(r.location_id) === shiftsFilter.location_id).map(r => (
+                         <div key={r.id} className="flex w-max shrink-0">
+                           {eachDayOfInterval({start: startOfMonth(shiftsFilter.month), end: endOfMonth(shiftsFilter.month)}).map(d => {
+                             const ds = format(d, 'yyyy-MM-dd');
+                             const cellShifts = shifts.filter(s => s.room_id === r.id && s.shift_date === ds);
+                             const mShift = cellShifts.find(s => s.turn === 'MANHÃ');
+                             const tShift = cellShifts.find(s => s.turn === 'TARDE');
+                             
+                             return (
+                               <div key={d.toISOString()} className="w-24 shrink-0 h-16 border-r border-b border-slate-200 flex flex-col p-1 gap-1">
+                                 <button onClick={() => { if (mShift) setSelectedShiftForEdit(mShift); setNewShift({ doctor_id: mShift?.doctor_id || '', specialty_id: mShift?.specialty_id || '', room_id: r.id.toString(), shift_date: ds, turn: 'MANHÃ' }); setShowShiftModal(true); }} className={`flex-1 rounded flex items-center justify-center text-[9px] font-bold leading-tight uppercase transition-colors ${mShift ? 'bg-blue-100 text-blue-800 hover:bg-blue-200 border border-blue-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                    {mShift ? <span className="line-clamp-1">{mShift.profiles?.full_name?.split(' ')[0]} (M)</span> : 'Livre (M)'}
+                                 </button>
+                                 <button onClick={() => { if (tShift) setSelectedShiftForEdit(tShift); setNewShift({ doctor_id: tShift?.doctor_id || '', specialty_id: tShift?.specialty_id || '', room_id: r.id.toString(), shift_date: ds, turn: 'TARDE' }); setShowShiftModal(true); }} className={`flex-1 rounded flex items-center justify-center text-[9px] font-bold leading-tight uppercase transition-colors ${tShift ? 'bg-purple-100 text-purple-800 hover:bg-purple-200 border border-purple-200' : 'bg-slate-100 text-slate-400 hover:bg-slate-200'}`}>
+                                    {tShift ? <span className="line-clamp-1">{tShift.profiles?.full_name?.split(' ')[0]} (T)</span> : 'Livre (T)'}
+                                 </button>
+                               </div>
+                             );
+                           })}
+                         </div>
+                       ))}
+                     </div>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : view === 'mapa_visual' ? (
             <div className="flex-1 overflow-auto min-h-0 bg-white rounded-2xl border border-slate-200 p-6">
                <div className="flex flex-col md:flex-row gap-4 mb-6">
@@ -551,6 +656,51 @@ export function SecretaryDashboard() {
           )}
         </section>
       </main>
+
+      {/* Shift Edit/Create Modal */}
+      {showShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4 print:hidden">
+          <div className="bg-white w-full max-w-md rounded-2xl p-8 shadow-2xl">
+            <h3 className="text-xl font-bold text-slate-900 mb-6 flex items-center gap-2">
+              <Map className="w-5 h-5 text-blue-600" />
+              {selectedShiftForEdit ? 'Editar Escala Médica' : 'Alocar Escala Médica'}
+            </h3>
+            
+            <form onSubmit={handleSaveShift} className="space-y-4">
+               <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Médico</label>
+                  <select required value={newShift.doctor_id} onChange={e=>setNewShift({...newShift, doctor_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                    <option value="">Selecione...</option>
+                    {doctors.map(d => <option key={d.id} value={d.id}>{d.full_name}</option>)}
+                  </select>
+               </div>
+               <div>
+                  <label className="block text-sm font-medium text-slate-700 mb-1">Especialidade (Opcional)</label>
+                  <select value={newShift.specialty_id} onChange={e=>setNewShift({...newShift, specialty_id: e.target.value})} className="w-full rounded-lg border-slate-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border">
+                    <option value="">Selecione...</option>
+                    {specialties.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+               </div>
+               
+               <div className="text-sm text-slate-500 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                  <p><strong>Data:</strong> {format(new Date(newShift.shift_date + 'T00:00:00'), 'dd/MM/yyyy')}</p>
+                  <p><strong>Turno:</strong> {newShift.turn}</p>
+                  <p><strong>Sala:</strong> {rooms.find(r => String(r.id) === newShift.room_id)?.name}</p>
+               </div>
+
+              <div className="flex justify-between items-center gap-3 pt-6">
+                {selectedShiftForEdit ? (
+                  <button type="button" onClick={() => handleDeleteShift(selectedShiftForEdit.id)} className="px-4 py-2 text-red-600 hover:text-red-700 font-bold text-sm">Remover</button>
+                ) : <div></div>}
+                <div className="flex gap-2">
+                  <button type="button" onClick={() => { setShowShiftModal(false); setSelectedShiftForEdit(null); }} className="px-4 py-2 border border-slate-300 rounded-lg text-slate-700 bg-white hover:bg-slate-50 font-medium text-sm">Cancelar</button>
+                  <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium shadow-sm text-sm">Salvar Registro</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Block Appointment Modal */}
       {showBlockModal && (

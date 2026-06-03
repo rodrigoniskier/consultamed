@@ -1,7 +1,7 @@
 export type Profile = {
   id: string;
   full_name: string;
-  role: 'secretaria' | 'medico';
+  role: 'secretaria' | 'medico' | 'secretaria_pacientes';
   max_primeira_vez?: number | null;
   max_retorno?: number | null;
 };
@@ -9,6 +9,21 @@ export type Profile = {
 export type Location = {
   id: number;
   name: string;
+};
+
+export type Room = {
+  id: number;
+  name: string;
+  location_id: number;
+};
+
+export type DoctorShift = {
+  id: number;
+  shift_date: string; // DATE
+  turn: 'MANHÃ' | 'TARDE' | 'NOITE';
+  doctor_id: string;
+  room_id: number;
+  specialty_id: number;
 };
 
 export type Specialty = {
@@ -19,12 +34,15 @@ export type Specialty = {
 export type Patient = {
   id: number;
   full_name: string;
+  mother_name?: string | null;
   rg: string | null;
   cpf: string | null;
   cartao_sus: string | null;
   birth_date: string | null;
   phone: string | null;
   notes: string | null;
+  has_referral?: boolean;
+  referred_by?: string | null;
 };
 
 export type Appointment = {
@@ -33,6 +51,7 @@ export type Appointment = {
   specialty_id: number | null;
   doctor_id: string;
   location_id?: number | null;
+  doctor_shift_id?: number | null;
   appointment_date: string; // DATE representation
   appointment_time: string;
   turn: 'MANHÃ' | 'TARDE' | 'NOITE';
@@ -49,4 +68,5 @@ export type AppointmentWithDetails = Appointment & {
   specialties?: Specialty;
   locations?: Location;
   profiles: Profile; // The doctor's profile
+  doctor_shifts?: DoctorShift;
 };
