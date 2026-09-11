@@ -426,7 +426,7 @@ export function SecretaryDashboard() {
                                 appt.status === 'atendido' ? 'text-green-600' :
                                 appt.status === 'cancelado' || appt.status === 'nao_compareceu' ? 'text-red-600' :
                                 'text-blue-600'
-                              }`}>{appt.status === 'nao_compareceu' ? 'não compareceu' : appt.status}</span>
+                              }`}>{appt.status === 'agendado' ? ((appt.secretary_notes || '').toUpperCase().includes('FICHA/PRONTUÁRIO FÍSICO: SIM') ? 'Tem ficha' : 'Não tem ficha') : appt.status === 'nao_compareceu' ? 'não compareceu' : appt.status}</span>
                               {appt.appointment_type && <span className="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase">{appt.appointment_type.replace('_', ' ')}</span>}
                            </div>
                          </>
@@ -461,7 +461,7 @@ export function SecretaryDashboard() {
                            appt.status === 'atendido' ? 'text-green-600' :
                            appt.status === 'cancelado' || appt.status === 'nao_compareceu' || appt.status === 'bloqueado' ? 'text-red-600' :
                            'text-slate-600'
-                        }`}>{appt.status === 'nao_compareceu' ? 'não compareceu' : appt.status}</span>
+                        }`}>{appt.status === 'agendado' ? ((appt.secretary_notes || '').toUpperCase().includes('FICHA/PRONTUÁRIO FÍSICO: SIM') ? 'Tem ficha' : 'Não tem ficha') : appt.status === 'nao_compareceu' ? 'não compareceu' : appt.status}</span>
                       </div>
                       {appt.appointment_type && appt.status !== 'bloqueado' && (
                         <div className="mt-1 text-[10px] text-slate-500 uppercase font-medium">{appt.appointment_type.replace('_', ' ')}</div>
