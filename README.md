@@ -6,6 +6,18 @@
 
 **Demo:** https://consultamed-mocha.vercel.app
 
+## Problema, público e resultado
+
+**Problema.** Agendas ambulatoriais com vários perfis (quem marca, quem cadastra pacientes e quem atende) precisam de visões e permissões diferentes.
+
+**Para quem.** Secretarias e médicos de um ambulatório: secretaria, secretaria de pacientes e médico, cada um com seu painel.
+
+**O que entrega.** Cadastro de pacientes, especialidades, escalas, locais e consultas; agenda do médico atualizada em tempo real; dashboards por função; interface responsiva e PWA.
+
+**Tecnologias.** React, TypeScript, Vite, Supabase (Auth e PostgreSQL), Tailwind CSS, React Router, Vercel.
+
+**Qualidade e evidências.** Demonstração publicada. A autorização no banco deve usar Row Level Security (RLS), como explica a seção de segurança. Este repositório não tem testes automatizados.
+
 ## O que o projeto demonstra
 
 - autenticação com Supabase Auth;
