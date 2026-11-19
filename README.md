@@ -16,7 +16,7 @@
 
 **Tecnologias.** React, TypeScript, Vite, Supabase (Auth e PostgreSQL), Tailwind CSS, React Router, Vercel.
 
-**Qualidade e evidências.** Demonstração publicada. A autorização no banco deve usar Row Level Security (RLS), como explica a seção de segurança. Este repositório não tem testes automatizados.
+**Qualidade e evidências.** Demonstração publicada. A autorização no banco deve usar Row Level Security (RLS), como explica a seção de segurança. Não há testes automatizados; o CI roda `tsc --noEmit` e o build a cada push e pull request. Licença MIT.
 
 ## O que o projeto demonstra
 
